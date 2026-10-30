@@ -2,7 +2,7 @@
   "name": "dday-board",
   "version": "1.0.0",
   "dependencies": {
-    "@netlify/blobs": "^2.0.0",
+    "@netlify/blobs": "^10.0.0",
     "@netlify/functions": "^1.0.0"
   }
 }
