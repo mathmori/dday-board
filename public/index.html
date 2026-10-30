@@ -326,12 +326,12 @@ input[type=date]{color-scheme:dark}
 
 /* ─────────── 음악 버튼 ─────────── */
 .music-btn{
-  position:fixed;right:16px;bottom:16px;z-index:70;
+  position:fixed;right:16px;bottom:80px;z-index:70;
   width:48px;height:48px;border-radius:50%;
   border:1px solid rgba(197,160,89,.45);
   background:var(--card);color:var(--gold);
   font-size:19px;cursor:pointer;
-  display:none;place-items:center;
+  display:grid;place-items:center;
   box-shadow:0 10px 26px -10px rgba(0,0,0,.8);
   transition:.18s;
 }
@@ -344,7 +344,6 @@ input[type=date]{color-scheme:dark}
   0%,100%{box-shadow:0 0 0 0 rgba(197,160,89,.5)}
   50%{box-shadow:0 0 0 10px rgba(197,160,89,0)}
 }
-body.admin .music-btn{display:grid}
 
 #ytHost{
   position:fixed;width:1px;height:1px;
@@ -357,7 +356,7 @@ body.admin .music-btn{display:grid}
   .card{padding:22px 14px 18px;border-radius:14px}
   .card-name{font-size:15.5px;margin-bottom:14px}
   .dialog{padding:22px}
-  .music-btn{width:44px;height:44px;font-size:17px;right:14px;bottom:14px}
+  .music-btn{width:44px;height:44px;font-size:17px;right:14px;bottom:80px}
 }
 </style>
 </head>
