@@ -156,6 +156,7 @@ body.admin .card-actions{display:flex}
   transition:.15s;
 }
 .icon-btn:hover{background:rgba(197,160,89,.22)}
+.icon-btn.copy:hover{background:rgba(197,160,89,.28);color:var(--gold-hi)}
 .icon-btn.del:hover{background:rgba(180,60,60,.25);color:#e8a0a0}
 
 /* ─────────── 확장 영역 ─────────── */
@@ -212,7 +213,6 @@ body.admin .card-actions{display:flex}
   font-size:.8em;font-weight:400;margin-left:2px;
 }
 
-/* 1/100초 강조 */
 .card-live .centis,
 .card-total-sub .centis{
   color:var(--gold-hi);
@@ -308,6 +308,7 @@ input:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(197,160,89,.15)}
 input[type=date]{color-scheme:dark}
 .hint{font-size:12.5px;color:var(--sage);line-height:1.5}
 .hint.error{color:#e8a0a0;font-weight:700}
+.extra-hint{font-size:11px;font-weight:400;color:var(--muted);line-height:1.4}
 .dialog-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}
 
 /* ─────────── 토스트 ─────────── */
@@ -406,7 +407,7 @@ body.admin .music-btn{display:grid}
   </form>
 </div>
 
-<!-- 시험 추가/수정 -->
+<!-- 시험 추가/수정/복사 -->
 <div class="overlay" id="itemOverlay" hidden>
   <form class="dialog" id="itemForm">
     <h2 id="itemTitle">시험 추가</h2>
@@ -417,6 +418,10 @@ body.admin .music-btn{display:grid}
     <label>학년
       <input id="itemGrade" list="gradeOpts" placeholder="예: 1학년" maxlength="10" required>
       <datalist id="gradeOpts"></datalist>
+    </label>
+    <label id="itemExtraGradesWrap">추가 학년 (선택, 쉼표로 구분)
+      <input id="itemExtraGrades" placeholder="예: 2학년, 3학년" maxlength="60">
+      <span class="extra-hint">입력한 학년마다 카드가 따로 생성됩니다</span>
     </label>
     <label>시험 이름
       <input id="itemName" placeholder="예: 2차지필" maxlength="40" required>
@@ -491,6 +496,7 @@ body.admin .music-btn{display:grid}
   let isAdmin = false;
   let adminPassword = '';
   let editingId = null;
+  let isFreshAddMode = false;    // 추가 학년 필드 사용 여부
   let selectedSchool = localStorage.getItem('dday.sel.school') || '전체';
   let selectedGrade  = localStorage.getItem('dday.sel.grade')  || '전체';
   let renderedDay = new Date().toDateString();
@@ -573,7 +579,7 @@ body.admin .music-btn{display:grid}
      ══════════════════════════════════════ */
   function targetTime(iso) {
     const [y, m, d] = iso.split('-').map(Number);
-    return new Date(y, m - 1, d, 23, 59, 59).getTime();  // 시험일 23:59:59까지
+    return new Date(y, m - 1, d, 23, 59, 59).getTime();
   }
 
   function diffParts(iso) {
@@ -608,6 +614,7 @@ body.admin .music-btn{display:grid}
     return `
       <article class="card ${cls}" data-phase="0" data-id="${e.id}" data-date="${e.date}">
         <div class="card-actions">
+          <button class="icon-btn copy" data-copy="${e.id}" title="복사">⧉</button>
           <button class="icon-btn" data-edit="${e.id}" title="수정">✎</button>
           <button class="icon-btn del" data-del="${e.id}" title="삭제">✕</button>
         </div>
@@ -723,7 +730,7 @@ body.admin .music-btn{display:grid}
   function bindCardClicks(grid) {
     grid.querySelectorAll('.card').forEach(card => {
       card.addEventListener('click', ev => {
-        if (ev.target.closest('[data-edit],[data-del]')) return;
+        if (ev.target.closest('[data-edit],[data-del],[data-copy]')) return;
 
         let phase = parseInt(card.dataset.phase || '0', 10);
         phase = (phase + 1) % 3;
@@ -796,7 +803,12 @@ body.admin .music-btn{display:grid}
     $$('[data-edit]', grid).forEach(b => b.onclick = () => openItem(b.dataset.edit));
     $$('[data-del]',  grid).forEach(b => b.onclick = () => removeItem(b.dataset.del));
 
-    /* 저장된 확장 상태 복원 */
+    $$('[data-copy]', grid).forEach(b => b.onclick = (ev) => {
+      ev.stopPropagation();
+      const src = state.exams.find(x => x.id === b.dataset.copy);
+      if (src) openItem(null, src);
+    });
+
     const phases = loadPhases();
     grid.querySelectorAll('.card').forEach(card => {
       const saved = phases[card.dataset.id];
@@ -875,19 +887,44 @@ body.admin .music-btn{display:grid}
   };
 
   /* ══════════════════════════════════════
-     시험 추가 / 수정 / 삭제
+     시험 추가 / 수정 / 복사 / 삭제
      ══════════════════════════════════════ */
-  function openItem(id) {
+  function openItem(id, template) {
     editingId = id || null;
     const it = id ? state.exams.find(x => x.id === id) : null;
-    $('#itemTitle').textContent = it ? '시험 수정' : '시험 추가';
-    $('#itemSchool').value = it ? (it.school || '') : (selectedSchool !== '전체' ? selectedSchool : '');
-    $('#itemGrade').value  = it ? (it.grade  || '') : (selectedGrade  !== '전체' ? selectedGrade  : '');
-    $('#itemName').value   = it ? it.name : '';
-    $('#itemDate').value   = it ? it.date : toISO(new Date());
-    $('#itemMemo').value   = it ? (it.memo || '') : '';
+    const isCopy = !it && !!template;
+    isFreshAddMode = !it && !isCopy;
+
+    const src = it || template || null;
+
+    $('#itemTitle').textContent = it
+      ? '시험 수정'
+      : (isCopy ? '시험 복사' : '시험 추가');
+
+    $('#itemSchool').value = src ? (src.school || '') : (selectedSchool !== '전체' ? selectedSchool : '');
+    $('#itemGrade').value  = src ? (src.grade  || '') : (selectedGrade  !== '전체' ? selectedGrade  : '');
+    $('#itemName').value   = src ? src.name : '';
+    $('#itemDate').value   = src ? src.date : toISO(new Date());
+    $('#itemMemo').value   = src ? (src.memo || '') : '';
+
+    /* 추가 학년 필드는 순수 신규 추가일 때만 표시 */
+    $('#itemExtraGradesWrap').style.display = isFreshAddMode ? '' : 'none';
+    $('#itemExtraGrades').value = '';
+
     openEl('#itemOverlay');
-    setTimeout(() => (it ? $('#itemName') : $('#itemSchool')).focus(), 60);
+    setTimeout(() => {
+      if (isCopy) {
+        const n = $('#itemName');
+        n.focus();
+        n.select();
+      } else if (it) {
+        $('#itemName').focus();
+      } else {
+        const s = $('#itemSchool');
+        s.focus();
+        if (s.value) s.select();
+      }
+    }, 60);
   }
 
   $('#addBtn').onclick = () => openItem(null);
@@ -902,24 +939,55 @@ body.admin .music-btn{display:grid}
     if (!school || !grade || !name || !date) return;
 
     const isNew = !editingId;
+
     if (!isNew) {
+      /* 수정 */
       const it = state.exams.find(x => x.id === editingId);
       if (it) { it.school = school; it.grade = grade; it.name = name; it.date = date; it.memo = memo; }
-    } else {
-      state.exams.push({ id: uid(), school, grade, name, date, memo });
+
+      try {
+        await persist();
+        render();
+        closeAll();
+        toast('저장했어요');
+      } catch (err) {
+        toast(err.message || '저장 실패');
+        loadFromServer();
+      }
+      return;
     }
+
+    /* 신규(추가 또는 복사) */
+    const gradesToAdd = [grade];
+
+    /* 추가 학년 필드는 '추가' 모드에서만 유효 */
+    if (isFreshAddMode) {
+      const extra = $('#itemExtraGrades').value.trim();
+      if (extra) {
+        extra.split(',')
+          .map(g => g.trim())
+          .filter(Boolean)
+          .forEach(g => {
+            if (!gradesToAdd.includes(g)) gradesToAdd.push(g);
+          });
+      }
+    }
+
+    gradesToAdd.forEach(g => {
+      state.exams.push({ id: uid(), school, grade: g, name, date, memo });
+    });
 
     try {
       await persist();
-      if (isNew) {
-        selectedSchool = school;
-        selectedGrade  = grade;
-        localStorage.setItem('dday.sel.school', selectedSchool);
-        localStorage.setItem('dday.sel.grade',  selectedGrade);
-      }
+      selectedSchool = school;
+      selectedGrade  = grade;
+      localStorage.setItem('dday.sel.school', selectedSchool);
+      localStorage.setItem('dday.sel.grade',  selectedGrade);
       render();
       closeAll();
-      toast('저장했어요');
+      toast(gradesToAdd.length > 1
+        ? gradesToAdd.length + '개 카드를 만들었어요'
+        : '저장했어요');
     } catch (err) {
       toast(err.message || '저장 실패');
       loadFromServer();
@@ -1055,7 +1123,6 @@ body.admin .music-btn{display:grid}
   }
   loadFromServer();
 
-  // 자정 지나면 D-DAY 자동 갱신
   setInterval(() => {
     const d = new Date().toDateString();
     if (d !== renderedDay) { renderedDay = d; render(); }
